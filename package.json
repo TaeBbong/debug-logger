@@ -1,0 +1,39 @@
+{
+  "name": "vscode-debug-logger",
+  "displayName": "Debug Session Markdown Logger",
+  "description": "Record the execution timeline of a VS Code debug session and export it as Markdown.",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:extension.startLogging",
+    "onCommand:extension.stopLogging"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.startLogging",
+        "title": "Debug Log: Start Logging"
+      },
+      {
+        "command": "extension.stopLogging",
+        "title": "Debug Log: Stop & Save Log"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.4",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^5.8.3"
+  }
+}

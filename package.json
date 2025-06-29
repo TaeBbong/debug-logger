@@ -9,19 +9,14 @@
   },
   "categories": ["Other"],
   "activationEvents": [
-    "onCommand:extension.startLogging",
-    "onCommand:extension.stopLogging"
+    "onCommand:debugLogger.startLogging"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "extension.startLogging",
+        "command": "debugLogger.startLogging",
         "title": "Debug Log: Start Logging"
-      },
-      {
-        "command": "extension.stopLogging",
-        "title": "Debug Log: Stop & Save Log"
       }
     ]
   },

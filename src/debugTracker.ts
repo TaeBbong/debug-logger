@@ -1,83 +1,66 @@
-import * as vscode from "vscode";
-import { Logger } from "./logger";
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 
-export class DebugTracker implements vscode.Disposable {
-  private readonly logger: Logger;
-  private sessionListener?: vscode.Disposable;
-  private stopListener?: vscode.Disposable;
+export class DebugTracker {
+  private logs: string[] = [];
+  private step = 0;
 
-  constructor(private readonly ctx: vscode.ExtensionContext) {
-    this.logger = new Logger();
-  }
+  constructor(private ctx: vscode.ExtensionContext) {}
 
-  start() {
-    this.logger.start();
-
-    // Attach to the FIRST debug session that starts after the command.
-    const onStart = vscode.debug.onDidStartDebugSession((session) => {
-      // Subscribe to *stopped* events inside that session
-      this.sessionListener = vscode.debug.onDidReceiveDebugSessionCustomEvent(
-        async (e) => {
-          if (e.session.id !== session.id) return;
-          if (e.event === "stopped") {
-            await this.captureTopFrame(session, e.body);
+  factory: vscode.DebugAdapterTrackerFactory = {
+    createDebugAdapterTracker: (session: vscode.DebugSession) => {
+      return {
+        // 디버그 어댑터가 IDE로 보내는 메시지를 들음
+        onDidSendMessage: async (msg: any) => {
+          if (msg.event === 'stopped') {
+            // 가장 위 스택프레임 하나만 가져옴
+            const { threadId } = msg.body;
+            const stack = await session.customRequest('stackTrace', {
+              threadId,
+              startFrame: 0,
+              levels: 1
+            });
+            const frame = stack.stackFrames[0];
+            await this.captureFrame(frame);
           }
         }
+      };
+    }
+  };
+
+  private async captureFrame(frame: any) {
+    const { source, line } = frame;
+    if (!source?.path) return;
+    try {
+      const doc = await vscode.workspace.openTextDocument(source.path);
+      const code = doc.lineAt(line - 1).text;
+      const lang = path.extname(source.path).substring(1) || '';
+      this.step += 1;
+      this.logs.push(
+        `### 🪵 Step ${this.step}: ${source.name}:${line}\n\n` +
+          '```' +
+          lang +
+          `\n${code}\n\`\`\`\n`
       );
-
-      // Auto‑stop when the session ends
-      this.stopListener = vscode.debug.onDidTerminateDebugSession((s) => {
-        if (s.id === session.id) {
-          void this.stopAndSave();
-        }
-      });
-
-      onStart.dispose(); // Only need the first session
-    });
-
-    this.ctx.subscriptions.push(onStart);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
-  async stopAndSave() {
-    await this.logger.saveToMarkdown();
-    this.dispose();
-  }
-
-  async captureTopFrame(
-    session: vscode.DebugSession,
-    body: Record<string, unknown>
-  ) {
-    const threadId = body["threadId"] as number | undefined;
-    if (!threadId) {
+  flushToFile() {
+    if (!this.logs.length) {
+      vscode.window.showWarningMessage('No debug steps captured.');
       return;
     }
-    try {
-      const stack = await session.customRequest("stackTrace", {
-        threadId,
-        startFrame: 0,
-        levels: 1,
-      });
-      const frame = stack.stackFrames?.[0];
-      if (!frame) return;
-      const sourcePath = frame.source?.path;
-      const lineNumber = frame.line;
-
-      if (!sourcePath) return;
-      const doc = await vscode.workspace.openTextDocument(sourcePath);
-      const line = doc.lineAt(lineNumber - 1).text.trim();
-
-      this.logger.addStep({
-        file: sourcePath,
-        line: lineNumber,
-        code: line,
-      });
-    } catch (err) {
-      console.error("Failed to capture frame", err);
-    }
-  }
-
-  dispose() {
-    this.sessionListener?.dispose();
-    this.stopListener?.dispose();
+    const md = this.logs.join('\n---\n');
+    const fileName = `debug-log-${new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')}.md`;
+    const outDir = this.ctx.globalStorageUri.fsPath;
+    fs.mkdirSync(outDir, { recursive: true });
+    const fullPath = path.join(outDir, fileName);
+    fs.writeFileSync(fullPath, md, 'utf8');
+    vscode.window.showInformationMessage(`Debug log saved → ${fullPath}`);
   }
 }

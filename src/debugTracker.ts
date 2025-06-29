@@ -11,10 +11,8 @@ export class DebugTracker {
   factory: vscode.DebugAdapterTrackerFactory = {
     createDebugAdapterTracker: (session: vscode.DebugSession) => {
       return {
-        // 디버그 어댑터가 IDE로 보내는 메시지를 들음
         onDidSendMessage: async (msg: any) => {
           if (msg.event === 'stopped') {
-            // 가장 위 스택프레임 하나만 가져옴
             const { threadId } = msg.body;
             const stack = await session.customRequest('stackTrace', {
               threadId,
@@ -32,13 +30,17 @@ export class DebugTracker {
   private async captureFrame(frame: any) {
     const { source, line } = frame;
     if (!source?.path) return;
+
     try {
       const doc = await vscode.workspace.openTextDocument(source.path);
       const code = doc.lineAt(line - 1).text;
       const lang = path.extname(source.path).substring(1) || '';
+      const filePath = source.path;                                    
+      const fileName = source.name || path.basename(filePath);          
+
       this.step += 1;
       this.logs.push(
-        `### 🪵 Step ${this.step}: ${source.name}:${line}\n\n` +
+        `### 🪵 Step ${this.step}: ${fileName}:${line}\n\n` +           
           '```' +
           lang +
           `\n${code}\n\`\`\`\n`
@@ -53,12 +55,17 @@ export class DebugTracker {
       vscode.window.showWarningMessage('No debug steps captured.');
       return;
     }
+
     const md = this.logs.join('\n---\n');
     const fileName = `debug-log-${new Date()
       .toISOString()
       .replace(/[:.]/g, '-')}.md`;
-    const outDir = this.ctx.globalStorageUri.fsPath;
+
+    const workspaceFolder =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+    const outDir = path.join(workspaceFolder, '.vscode', 'debug-logs');
     fs.mkdirSync(outDir, { recursive: true });
+
     const fullPath = path.join(outDir, fileName);
     fs.writeFileSync(fullPath, md, 'utf8');
     vscode.window.showInformationMessage(`Debug log saved → ${fullPath}`);
